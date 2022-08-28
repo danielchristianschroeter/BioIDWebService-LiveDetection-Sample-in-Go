@@ -6,6 +6,16 @@ on:
     tags:
       - '*'
 
+builds:
+  -
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
