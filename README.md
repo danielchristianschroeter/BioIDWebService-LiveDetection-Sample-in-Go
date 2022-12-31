@@ -11,7 +11,7 @@ You can request trial access on https://bwsportal.bioid.com/register
 
 ## Usage
 
-1. Build or download prebuild executeable
+1. Build or download prebuild executable
 2. Execute following command to peform a face liveness detection with two images:
 ```
 ./BioIDWebService-LiveDetection-Sample-in-Go -BWSAppID <BWSAppID> -BWSAppSecret <BWSAppSecret> -image1 ./example_images/live_image1_without_errors.jpg -image2 ./example_images/live_image2_without_errors.jpg
