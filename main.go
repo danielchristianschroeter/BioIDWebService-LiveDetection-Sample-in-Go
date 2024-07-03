@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
@@ -9,23 +8,23 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
+	"strings"
 	"time"
 )
 
 // Used for build version information
 var version = "development"
 
-// Global variables used for command line flags
-var (
+// AppConfig holds the configuration for the application
+type AppConfig struct {
 	BWSAppID         string
 	BWSAppSecret     string
-	image1           string
-	image2           string
-	detailedResponse bool
-)
+	Image1           string
+	Image2           string
+	DetailedResponse bool
+}
 
-// Struct from the Response
+// Response represents the JSON response structure
 type Response struct {
 	Success bool   `json:"Success"`
 	State   string `json:"State"`
@@ -45,44 +44,63 @@ type Response struct {
 	} `json:"Samples"`
 }
 
-func httpClient() *http.Client {
-	client := &http.Client{Timeout: 30 * time.Second} // 30 seconds timeout
-	return client
+func main() {
+	log.SetFlags(0)
+	flag.Usage = func() {
+		log.Println("BioIDWebService LiveDetection Sample in Go. Version: " + version)
+		flag.PrintDefaults()
+	}
+	
+	config := parseFlags()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	base64Image1 := imageToBase64(config.Image1)
+	base64Image2 := imageToBase64(config.Image2)
+
+	statusCode, response := sendRequest(client, http.MethodPost, config, base64Image1, base64Image2)
+	processResponse(statusCode, response, config.DetailedResponse)
 }
 
-// BasicAuth required for BWS AppID and AppSecret
-func basicAuth(username, password string) string {
-	auth := username + ":" + password
-	return base64.StdEncoding.EncodeToString([]byte(auth))
+// parses the command-line flags and returns an AppConfig struct
+func parseFlags() AppConfig {
+	var config AppConfig
+	flag.StringVar(&config.BWSAppID, "BWSAppID", "", "BioIDWebService AppID")
+	flag.StringVar(&config.BWSAppSecret, "BWSAppSecret", "", "BioIDWebService AppSecret")
+	flag.StringVar(&config.Image1, "image1", "", "1st source image")
+	flag.StringVar(&config.Image2, "image2", "", "2nd source image")
+	flag.BoolVar(&config.DetailedResponse, "detailedResponse", false, "Return detailed JSON output of response")
+	flag.Parse()
+
+	if config.BWSAppID == "" || config.BWSAppSecret == "" || config.Image1 == "" || config.Image2 == "" {
+		log.Fatal("Usage: -BWSAppID <BWSAppID> -BWSAppSecret <BWSAppSecret> -image1 <image1> -image2 <image2>")
+	}
+	return config
 }
 
-// Prepare http request
-func sendRequest(client *http.Client, method string, BWSAppID string, BWSAppSecret string, liveimage1 string, liveimage2 string) (int, []byte) {
+// Sends an HTTP request and returns the status code and response body
+func sendRequest(client *http.Client, method string, config AppConfig, liveimage1, liveimage2 string) (int, []byte) {
 	endpoint := "https://bws.bioid.com/extension/livedetection"
-	if detailedResponse {
+	if config.DetailedResponse {
 		endpoint += "?state=true"
 	}
-	//endpoint := BWSEndpoint
+
 	values, _ := json.Marshal(map[string]string{
 		"liveimage1": liveimage1,
 		"liveimage2": liveimage2,
 	})
-	// Using http.Request to make a request
-	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(values))
-	req.Header.Add("Content-Type", "application/json;charset=utf-8")
-	req.Header.Add("Authorization", "Basic "+basicAuth(BWSAppID, BWSAppSecret))
-	// Handle error
+
+	req, err := http.NewRequest(method, endpoint, strings.NewReader(string(values)))
 	if err != nil {
-		log.Fatalf("An error occured %v", err)
+		log.Fatalf("An error occurred %v", err)
 	}
+
+	req.SetBasicAuth(config.BWSAppID, config.BWSAppSecret)
+	req.Header.Add("Content-Type", "application/json;charset=utf-8")
 
 	response, err := client.Do(req)
 	if err != nil {
 		log.Fatalf("Error sending request to API endpoint. %+v", err)
 	}
-
-	httpresponsestatuscode := response.StatusCode
-	// Close the connection to reuse it
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
@@ -90,103 +108,59 @@ func sendRequest(client *http.Client, method string, BWSAppID string, BWSAppSecr
 		log.Fatalf("Could not parse response body. %+v", err)
 	}
 
-	return httpresponsestatuscode, body
+	return response.StatusCode, body
 }
 
-func imageToBase64(file string) string {
-	// Read the entire file into a byte slice
-	bytes, err := os.ReadFile(file)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var base64Encoding string
-	// Determine the content type of the image file
-	mimeType := http.DetectContentType(bytes)
-
-	// Prepend the appropriate URI scheme header depending on the MIME type
-	switch mimeType {
-	case "image/jpeg":
-		base64Encoding += "data:image/jpeg;base64,"
-	case "image/png":
-		base64Encoding += "data:image/png;base64,"
-	default:
-		log.Fatalf("mime type %v for %v is not supported.", mimeType, file)
-	}
-
-	// Append the base64 encoded output to image encoding
-	base64Encoding += base64.StdEncoding.EncodeToString(bytes)
-
-	// Return the full base64 representation of the image
-	return base64Encoding
-}
-
-// PrettyPrint to print struct in a readable way
-func PrettyPrint(i interface{}) string {
-	s, _ := json.MarshalIndent(i, "", "\t")
-	return string(s)
-}
-
-func init() {
-	// Initialize command line flags
-	flag.StringVar(&BWSAppID, "BWSAppID", "", "BioIDWebService AppID")
-	flag.StringVar(&BWSAppSecret, "BWSAppSecret", "", "BioIDWebService AppSecret")
-	flag.StringVar(&image1, "image1", "", "1st source image")
-	flag.StringVar(&image2, "image2", "", "2nd source image")
-	flag.BoolVar(&detailedResponse, "detailedResponse", false, "Return detailed JSON output of response")
-}
-
-func main() {
-	log.SetFlags(0)
-	flag.Usage = func() {
-		log.Println("BioIDWebService LiveDetection Sample in Go. Version: " + version)
-		flag.PrintDefaults()
-	}
-	flag.Parse()
-
-	if len(BWSAppID) == 0 || len(BWSAppSecret) == 0 || len(image1) == 0 || len(image2) == 0 {
-		log.Fatal("Usage: -BWSAppID <BWSAppID> -BWSAppSecret <BWSAppSecret> -image1 <image1> -image2 <image2>")
-	}
-
-	// Convert images to base64 string
-	base64_image1 := imageToBase64(image1)
-	base64_image2 := imageToBase64(image2)
-
-	// c should be re-used for further calls
-	c := httpClient()
-	httpresponsestatuscode, response := sendRequest(c, http.MethodPost, BWSAppID, BWSAppSecret, base64_image1, base64_image2)
-
-	// Validate http response code
-	if httpresponsestatuscode == 200 {
-		// detailed response output
-		if detailedResponse {
-			// Parse []byte to go struct pointer, required for PrettyPrint
+// processes the HTTP response, printing out detailed information if required
+func processResponse(statusCode int, response []byte, detailed bool) {
+	if statusCode == http.StatusOK {
+		if detailed {
 			var result Response
 			if err := json.Unmarshal(response, &result); err != nil {
 				log.Println("Can not unmarshal JSON.")
 			}
-			log.Println("Detailed response body:\n" + PrettyPrint(result))
+			log.Println("Detailed response body:\n" + prettyPrint(result))
 			if result.Success {
 				log.Println("Result:\nImages are recorded from a live person.")
 			} else {
 				log.Println("Result:\nImages are NOT recorded from a live person.")
 			}
-			// Check for errors
-			for i, samples := range result.Samples {
-				// If Samples.Errors is not empty, return error
-				if len(samples.Errors) > 0 {
-					no := strconv.Itoa(i + 1)
-					log.Println("Errors found for image" + no + ":")
-					for _, errors := range samples.Errors {
-						log.Println(errors.Code, "-", errors.Message, "-", errors.Details)
-					}
-				}
-			}
 		} else {
-			// Default response
 			log.Println(string(response))
 		}
 	} else {
-		log.Fatalf("Received http response code != 200: %v", httpresponsestatuscode)
+		log.Fatalf("Received http response code != 200: %v", statusCode)
 	}
+}
+
+// Converts an image file to a base64-encoded string
+func imageToBase64(file string) string {
+	bytes, err := os.ReadFile(file)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var builder strings.Builder
+	mimeType := http.DetectContentType(bytes)
+
+	switch mimeType {
+	case "image/jpeg":
+		builder.WriteString("data:image/jpeg;base64,")
+	case "image/png":
+		builder.WriteString("data:image/png;base64,")
+	default:
+		log.Fatalf("mime type %v for %v is not supported.", mimeType, file)
+	}
+
+	builder.WriteString(base64.StdEncoding.EncodeToString(bytes))
+	return builder.String()
+}
+
+// returns a pretty-printed JSON representation of an object
+func prettyPrint(i interface{}) string {
+	s, err := json.MarshalIndent(i, "", "\t")
+	if err != nil {
+		log.Fatalf("JSON marshal error: %v", err)
+	}
+	return string(s)
 }

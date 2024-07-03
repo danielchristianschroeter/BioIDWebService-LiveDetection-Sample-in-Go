@@ -1,8 +1,8 @@
 # BioIDWebService-LiveDetection-Sample-in-Go
 
-This repository contains a very simple example command line implementation of the **[LiveDetection REST API of the BioID WebService](https://developer.bioid.com/bwsreference/web-api/livedetection-web-api)** in Go.
+This repository contains a very simple example command line implementation of the **[LiveDetection REST API of the BioID WebService](https://developer.bioid.com/classicbws/bwsreference/webapi/livedetection)** in Go.
 
-Two recorded images are required to peform a face liveness detection.
+Two recorded images are required to perform a face liveness detection.
 
 ## Requirements
 
@@ -12,7 +12,8 @@ You can request trial access on https://bwsportal.bioid.com/register
 ## Usage
 
 1. Build or download prebuild executable
-2. Execute following command to peform a face liveness detection with two images:
+2. Execute following command to perform a face liveness detection with two images:
+
 ```
 ./BioIDWebService-LiveDetection-Sample-in-Go -BWSAppID <BWSAppID> -BWSAppSecret <BWSAppSecret> -image1 ./example_images/live_image1_without_errors.jpg -image2 ./example_images/live_image2_without_errors.jpg
 ```
@@ -23,7 +24,12 @@ fake_image1,2_without_errors.jpg => LiveDetectionFailed
 live_image1,2_with_errors.jpg => ImageOverExposure
 live_image1,2_without_errors.jpg
 
+Example Output:
+
+`true` or `false`
+
 ### Available command line parameter
+
 ```
 ./BioIDWebService-LiveDetection-Sample-in-Go --help
   -BWSAppID string
